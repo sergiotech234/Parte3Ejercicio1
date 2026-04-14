@@ -2,16 +2,18 @@ import java.sql.*;
 import java.util.*;
 
 public class Main {
+
     public static void main(String[] args) {
+
         Scanner teclado = new Scanner(System.in);
+
         String url = "jdbc:oracle:thin:@localhost:1521:xe";
-        String user = "USUARIO";
+        String user = "RIBERA";
         String password = "ribera";
 
-        // 1. Pedir datos correctamente
         System.out.println("Introduce el numero de la etapa:");
-        int numeroetapa = teclado.nextInt();
-        teclado.nextLine(); // 🔥 limpiar buffer
+        int numeroEtapa = teclado.nextInt();
+        teclado.nextLine();
 
         System.out.println("Introduce el origen de la etapa:");
         String origen = teclado.nextLine();
@@ -19,93 +21,92 @@ public class Main {
         System.out.println("Introduce el destino de la etapa:");
         String destino = teclado.nextLine();
 
-        System.out.println("Introduce la distancia (km) de la etapa:");
+        System.out.println("Introduce la distancia (km):");
         double distancia = teclado.nextDouble();
-        teclado.nextLine(); //  limpiar buffer
+        teclado.nextLine();
 
-        System.out.println("Introduce la fecha de la etapa (YYYY-MM-DD):");
+        System.out.println("Introduce la fecha (YYYY-MM-DD):");
         String fecha = teclado.nextLine();
 
         try (Connection conn = DriverManager.getConnection(url, user, password)) {
-            // 2. Transacción
             conn.setAutoCommit(false);
             try {
-                // 3. Insertar etapa (Oracle)
-                String sqlEtapa = "INSERT INTO ETAPA (numero_etapa, origen, destino, distancia, fecha) " +
-                        "VALUES (?, ?, ?, ?, TO_DATE(?, 'YYYY-MM-DD'))";
-                PreparedStatement ps = conn.prepareStatement(sqlEtapa);
-
-                ps.setInt(1, numeroetapa);
-                ps.setString(2, origen);
-                ps.setString(3, destino);
-                ps.setDouble(4, distancia);
-                ps.setString(5, fecha);
-
-                ps.executeUpdate();
-
-                // 4. Obtener ciclistas
-                String sqlCiclistas = "SELECT id_ciclista FROM CICLISTA";
+                // INSERT ETAPA
+                String sqlEtapa =
+                        "INSERT INTO ETAPA (NUMERO, ORIGEN, DESTINO, DISTANCIA_KM, FECHA) " +
+                                "VALUES (?, ?, ?, ?, TO_DATE(?, 'YYYY-MM-DD'))";
+                PreparedStatement psEtapa = conn.prepareStatement(sqlEtapa);
+                psEtapa.setInt(1, numeroEtapa);
+                psEtapa.setString(2, origen);
+                psEtapa.setString(3, destino);
+                psEtapa.setDouble(4, distancia);
+                psEtapa.setString(5, fecha);
+                psEtapa.executeUpdate();
+                // OBTENER CICLISTAS
+                List<Integer> ciclistas = new ArrayList<>();
+                String sqlCiclistas = "SELECT ID_CICLISTA FROM CICLISTA";
                 ResultSet rs = conn.createStatement().executeQuery(sqlCiclistas);
-
-                List<Integer> ciclista = new ArrayList<>();
-
                 while (rs.next()) {
-                    ciclista.add(rs.getInt("id_ciclista"));
+                    ciclistas.add(rs.getInt("ID_CICLISTA"));
+                }
+                int total = ciclistas.size();
+                // GENERAR POSICIONES SIN REPETIR
+                List<Integer> posiciones = new ArrayList<>();
+                for (int i = 1; i <= total; i++) {
+                    posiciones.add(i);
                 }
 
-                int totalCiclista = ciclista.size();
+                Collections.shuffle(posiciones);
 
-                // Generar posiciones sin repetir
-                List<Integer> posicion = new ArrayList<>();
-                Random rand = new Random();
+                // INSERT PARTICIPACION
+                String sqlPart =
+                        "INSERT INTO PARTICIPACION (ID_CICLISTA, NUMERO_ETAPA, POSICION, PUNTOS) " +
+                                "VALUES (?, ?, ?, ?)";
 
-                while (posicion.size() < totalCiclista) {
-                    int p = rand.nextInt(totalCiclista) + 1;
-                    if (!posicion.contains(p)) {
-                        posicion.add(p);
-                    }
-                }
+                PreparedStatement psPart = conn.prepareStatement(sqlPart);
 
-                // Insertar participaciones
-                String sqlParticipacion = "INSERT INTO PARTICIPACION VALUES (?, ?, ?, ?)";
-                PreparedStatement psParticipacion = conn.prepareStatement(sqlParticipacion);
+                for (int i = 0; i < total; i++) {
 
-                for (int i = 0; i < totalCiclista; i++) {
+                    int idCiclista = ciclistas.get(i);
+                    int posicion = posiciones.get(i);
 
-                    int pos = posicion.get(i);
                     int puntos;
 
-                    switch (pos) {
-                        case 1: puntos = 100; break;
-                        case 2: puntos = 90; break;
-                        case 3: puntos = 80; break;
-                        case 4: puntos = 70; break;
-                        case 5: puntos = 60; break;
-                        default: puntos = 0;
+                    switch (posicion) {
+                        case 1:
+                            puntos = 100;
+                        break;
+                        case 2:
+                            puntos = 90;
+                        break;
+                        case 3:
+                            puntos = 80;
+                        break;
+                        case 4:
+                            puntos = 70;
+                        break;
+                        case 5:
+                            puntos = 60;
+                        break;
+                        default:
+                            puntos = 0;
                     }
 
-                    psParticipacion.setInt(1, numeroetapa);
-                    psParticipacion.setInt(2, ciclista.get(i));
-                    psParticipacion.setInt(3, pos);
-                    psParticipacion.setInt(4, puntos);
+                    psPart.setInt(1, idCiclista);
+                    psPart.setInt(2, numeroEtapa);
+                    psPart.setInt(3, posicion);
+                    psPart.setInt(4, puntos);
 
-                    psParticipacion.executeUpdate();
+                    psPart.executeUpdate();
                 }
 
-                // Commit
                 conn.commit();
 
-                System.out.println("\nEtapa insertada correctamente.");
-                System.out.println("Número de etapa: " + numeroetapa);
-                System.out.println("Total ciclistas: " + totalCiclista);
-                System.out.println("Fecha: " + fecha);
+                System.out.println("Etapa y participaciones insertadas correctamente.");
 
             } catch (SQLException e) {
-
-                // 5. Rollback
                 conn.rollback();
-
-                System.out.println("Etapa cancelada por error. No se guardaron los datos.");
+                System.out.println("Error, transacción cancelada.");
                 e.printStackTrace();
             }
 
